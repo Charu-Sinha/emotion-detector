@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>NeuraSense · Emotion AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.esm.js" type="module" id="faceapi-script"></script>
+
+  <style>
+    :root {
+      --bg:        #080b12;
+      --surface:   #0d1120;
+      --panel:     #111827;
+      --border:    #1e2d45;
+      --accent:    #00d4ff;
+      --accent2:   #7c3aed;
+      --text:      #e2e8f0;
+      --muted:     #64748b;
+      --happy:     #22c55e;
+      --sad:       #3b82f6;
+      --angry:     #ef4444;
+      --fearful:   #f97316;
+      --disgusted: #a855f7;
+      --surprised: #eab308;
+      --neutral:   #94a3b8;
+      --font-main: 'Space Grotesk', sans-serif;
+      --font-mono: 'JetBrains Mono', monospace;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: var(--font-main);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+    body::before {
+      content: '';
+      position: fixed; inset: 0;
+      background-image:
+        linear-gradient(rgba(0,212,255,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0,212,255,0.03) 1px, transparent 1px);
+      background-size: 40px 40px;
+      pointer-events: none; z-index: 0;
+    }
+    header {
+      position: relative; z-index: 10;
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 1.2rem 2.5rem;
+      border-bottom: 1px solid var(--border);
+      backdrop-filter: blur(12px);
+      background: rgba(8,11,18,0.85);
+    }
+    .logo {
+      display: flex; align-items: center; gap: 0.7rem;
+      font-size: 1.3rem; font-weight: 700; letter-spacing: -0.02em;
+    }
+    .logo-icon {
+      width: 36px; height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      border-radius: 10px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem;
+    }
+    .logo span { color: var(--accent); }
+    .badge {
+      font-family: var(--font-mono);
+      font-size: 0.7rem; font-weight: 500;
+      background: rgba(0,212,255,0.1);
+      border: 1px solid rgba(0,212,255,0.3);
+      color: var(--accent);
+      padding: 0.25rem 0.7rem; border-radius: 999px;
+    }
+    nav { display: flex; gap: 0.5rem; }
+    .nav-pill {
+      font-size: 0.82rem; font-weight: 500;
+      padding: 0.4rem 1rem; border-radius: 8px;
+      background: transparent; border: 1px solid var(--border);
+      color: var(--muted); cursor: pointer; transition: all .2s;
+    }
+    .nav-pill.active, .nav-pill:hover {
+      border-color: var(--accent); color: var(--accent);
+      background: rgba(0,212,255,0.07);
+    }
+    #status-bar {
+      position: relative; z-index: 9;
+      display: flex; align-items: center; gap: 0.7rem;
+      padding: 0.55rem 2.5rem;
+      background: rgba(0,212,255,0.04);
+      border-bottom: 1px solid var(--border);
+      font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted);
+    }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%;
+      background: var(--muted); flex-shrink: 0; transition: background .4s;
+    }
+    .status-dot.loading { background: var(--accent); animation: pulse 1s infinite; }
+    .status-dot.ready   { background: var(--happy); }
+    .status-dot.error   { background: var(--angry); }
+    @keyframes pulse { 0%,100%{opacity:1}50%{opacity:0.3} }
+    main {
+      position: relative; z-index: 1;
+      display: grid;
+      grid-template-columns: 1fr 340px;
+      gap: 0;
+      min-height: calc(100vh - 100px);
+    }
+    .detection-panel {
+      padding: 2rem 2.5rem;
+      border-right: 1px solid var(--border);
+    }
+    .panel-title {
+      font-size: 0.7rem; font-weight: 600; letter-spacing: 0.12em;
+      text-transform: uppercase; color: var(--muted); margin-bottom: 1.2rem;
+    }
+    .mode-tabs { display: flex; gap: 0.5rem; margin-bottom: 1.5rem; }
+    .mode-tab {
+      flex: 1; padding: 0.65rem 1rem;
+      border-radius: 10px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted);
+      font-family: var(--font-main); font-size: 0.85rem; font-weight: 500;
+      cursor: pointer; transition: all .2s;
+      display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+    }
+    .mode-tab.active {
+      border-color: var(--accent); color: var(--accent);
+      background: rgba(0,212,255,0.08);
+    }
+    .viewport {
+      position: relative;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+      min-height: 420px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .viewport img, .viewport video {
+      max-width: 100%; max-height: 520px;
+      display: block; border-radius: 0;
+    }
+    .viewport-placeholder {
+      display: flex; flex-direction: column; align-items: center; gap: 1rem;
+      color: var(--muted); text-align: center; padding: 3rem;
+    }
+    .viewport-placeholder .icon { font-size: 3.5rem; opacity: 0.3; }
+    .viewport-placeholder p { font-size: 0.9rem; line-height: 1.6; max-width: 260px; }
+    .controls { display: flex; gap: 0.75rem; margin-top: 1.2rem; flex-wrap: wrap; }
+    .btn {
+      padding: 0.65rem 1.4rem; border-radius: 10px;
+      font-family: var(--font-main); font-size: 0.85rem; font-weight: 600;
+      cursor: pointer; transition: all .2s; border: none;
+      display: flex; align-items: center; gap: 0.5rem;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), #0099bb); color: #000;
+    }
+    .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 20px rgba(0,212,255,0.35); }
+    .btn-secondary {
+      background: transparent; border: 1px solid var(--border); color: var(--text);
+    }
+    .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-danger {
+      background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.3); color: var(--angry);
+    }
+    .btn-danger:hover { background: rgba(239,68,68,0.2); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; transform: none !important; }
+    #drop-zone {
+      border: 2px dashed var(--border); border-radius: 14px;
+      padding: 2.5rem; text-align: center;
+      cursor: pointer; transition: all .2s; color: var(--muted); font-size: 0.85rem;
+    }
+    #drop-zone:hover, #drop-zone.dragover {
+      border-color: var(--accent); color: var(--accent); background: rgba(0,212,255,0.04);
+    }
+    #drop-zone .drop-icon { font-size: 2.5rem; display: block; margin-bottom: 0.5rem; }
+    #file-input { display: none; }
+    .results-panel {
+      padding: 2rem 1.5rem;
+      display: flex; flex-direction: column; gap: 1.5rem;
+      overflow-y: auto;
+    }
+    .dominant-card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 16px; padding: 1.5rem;
+      text-align: center; position: relative; overflow: hidden;
+    }
+    .dominant-card::before {
+      content: '';
+      position: absolute; top: 0; left: 0; right: 0; height: 3px;
+      background: var(--card-accent, var(--accent)); transition: background .4s;
+    }
+    .emotion-emoji { font-size: 4rem; display: block; margin-bottom: 0.5rem; }
+    .emotion-name {
+      font-size: 1.5rem; font-weight: 700; text-transform: capitalize;
+      margin-bottom: 0.3rem; color: var(--card-accent, var(--accent));
+    }
+    .confidence-text { font-family: var(--font-mono); font-size: 0.78rem; color: var(--muted); }
+    .no-result { color: var(--muted); font-size: 0.85rem; padding: 1rem 0; }
+    .bars-section { display: flex; flex-direction: column; gap: 0.75rem; }
+    .emotion-row { display: flex; flex-direction: column; gap: 0.3rem; }
+    .emotion-label-row {
+      display: flex; justify-content: space-between; align-items: center; font-size: 0.78rem;
+    }
+    .emotion-label { font-weight: 500; text-transform: capitalize; }
+    .emotion-pct { font-family: var(--font-mono); color: var(--muted); font-size: 0.75rem; }
+    .bar-track { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+    .bar-fill {
+      height: 100%; border-radius: 3px;
+      background: var(--bar-color, var(--accent));
+      transition: width .6s cubic-bezier(.4,0,.2,1);
+    }
+    .meta-card {
+      background: var(--panel); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1rem 1.2rem;
+      display: flex; flex-direction: column; gap: 0.6rem;
+    }
+    .meta-row { display: flex; justify-content: space-between; font-size: 0.78rem; }
+    .meta-key { color: var(--muted); }
+    .meta-val { font-family: var(--font-mono); font-weight: 500; }
+    .history-list {
+      display: flex; flex-direction: column; gap: 0.5rem;
+      max-height: 200px; overflow-y: auto;
+    }
+    .history-item {
+      display: flex; align-items: center; gap: 0.6rem;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 8px; padding: 0.5rem 0.8rem; font-size: 0.78rem;
+    }
+    .history-emoji { font-size: 1.1rem; }
+    .history-info { flex: 1; }
+    .history-emotion { font-weight: 600; text-transform: capitalize; }
+    .history-time { color: var(--muted); font-size: 0.7rem; }
+    .history-conf { font-family: var(--font-mono); font-size: 0.72rem; color: var(--muted); }
+    #fps-badge {
+      position: absolute; top: 12px; right: 12px;
+      font-family: var(--font-mono); font-size: 0.68rem;
+      background: rgba(0,0,0,0.7); border: 1px solid var(--border);
+      color: var(--accent); padding: 0.2rem 0.55rem; border-radius: 6px; display: none;
+    }
+    .face-count-badge {
+      position: absolute; top: 12px; left: 12px;
+      font-family: var(--font-mono); font-size: 0.68rem;
+      background: rgba(0,0,0,0.7); border: 1px solid var(--border);
+      color: var(--text); padding: 0.2rem 0.55rem; border-radius: 6px; display: none;
+    }
+    .loading-overlay {
+      position: absolute; inset: 0; z-index: 20;
+      background: rgba(8,11,18,0.88);
+      display: none; flex-direction: column; align-items: center; justify-content: center;
+      gap: 1rem; border-radius: 16px;
+    }
+    .loading-overlay.visible { display: flex; }
+    .spinner {
+      width: 40px; height: 40px;
+      border: 3px solid var(--border); border-top-color: var(--accent);
+      border-radius: 50%; animation: spin .8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .loading-overlay p { font-size: 0.82rem; color: var(--muted); }
+    .face-tabs { display: flex; gap: 0.4rem; flex-wrap: wrap; margin-top: 0.6rem; }
+    .face-tab {
+      font-size: 0.75rem; padding: 0.25rem 0.65rem;
+      border-radius: 6px; border: 1px solid var(--border);
+      background: transparent; color: var(--muted); cursor: pointer;
+      font-family: var(--font-mono); transition: all .2s;
+    }
+    .face-tab.active { border-color: var(--accent); color: var(--accent); }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+    @media (max-width: 900px) {
+      main { grid-template-columns: 1fr; }
+      .detection-panel { border-right: none; border-bottom: 1px solid var(--border); }
+      header { padding: 1rem 1.2rem; }
+      nav { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🧠</div>
+    Neura<span>Sense</span>
+  </div>
+  <div class="badge">EMOTION AI v1.0</div>
+  <nav>
+    <button class="nav-pill active" onclick="setMode('image')">Image</button>
+    <button class="nav-pill" onclick="setMode('live')">Live Camera</button>
+  </nav>
+</header>
+
+<div id="status-bar">
+  <div class="status-dot loading" id="status-dot"></div>
+  <span id="status-text">Loading AI models… please wait</span>
+</div>
+
+<main>
+  <section class="detection-panel">
+    <p class="panel-title">Detection Workspace</p>
+
+    <div class="mode-tabs">
+      <button class="mode-tab active" id="tab-image" onclick="setMode('image')">🖼️ Image Upload</button>
+      <button class="mode-tab" id="tab-live" onclick="setMode('live')">📷 Live Camera</button>
+    </div>
+
+    <!-- IMAGE MODE -->
+    <div id="mode-image">
+      <div id="drop-zone"
+           onclick="document.getElementById('file-input').click()"
+           ondragover="event.preventDefault();this.classList.add('dragover')"
+           ondragleave="this.classList.remove('dragover')"
+           ondrop="handleDrop(event)">
+        <span class="drop-icon">📂</span>
+        <strong>Drop an image here</strong> or click to browse<br>
+        <small style="opacity:0.6">Supports JPG, PNG, WEBP</small>
+      </div>
+      <input type="file" id="file-input" accept="image/*" onchange="handleFileInput(event)">
+
+      <div class="viewport" id="viewport-image" style="display:none; margin-top:1rem;">
+        <div class="loading-overlay" id="img-loading">
+          <div class="spinner"></div><p>Analyzing faces…</p>
+        </div>
+        <img id="preview-img" src="" alt="Preview" crossorigin="anonymous">
+        <canvas id="overlay-img" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+        <span class="face-count-badge" id="badge-img"></span>
+      </div>
+      <div id="facetabs-img" class="face-tabs" style="display:none;"></div>
+
+      <div class="controls">
+        <button class="btn btn-primary" id="btn-analyze" onclick="analyzeImage()" disabled>⚡ Analyze</button>
+        <button class="btn btn-secondary" onclick="clearImage()">✕ Clear</button>
+      </div>
+    </div>
+
+    <!-- LIVE MODE -->
+    <div id="mode-live" style="display:none;">
+      <div class="viewport" id="viewport-live">
+        <div class="viewport-placeholder" id="live-placeholder">
+          <span class="icon">📷</span>
+          <p>Click <strong>Start Camera</strong> to begin real-time emotion detection</p>
+        </div>
+        <video id="live-video" autoplay muted playsinline style="display:none;max-width:100%;"></video>
+        <canvas id="overlay-live" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;"></canvas>
+        <span id="fps-badge">0 FPS</span>
+        <span class="face-count-badge" id="badge-live"></span>
+      </div>
+      <div id="facetabs-live" class="face-tabs" style="display:none;"></div>
+
+      <div class="controls">
+        <button class="btn btn-primary" id="btn-start" onclick="startCamera()">▶ Start Camera</button>
+        <button class="btn btn-danger" id="btn-stop" onclick="stopCamera()" style="display:none;">■ Stop</button>
+      </div>
+    </div>
+  </section>
+
+  <aside class="results-panel">
+    <div>
+      <p class="panel-title">Detected Emotion</p>
+      <div class="dominant-card" id="dominant-card">
+        <div class="no-result">No face detected yet.<br>Upload an image or start the camera.</div>
+      </div>
+    </div>
+
+    <div>
+      <p class="panel-title">Emotion Breakdown</p>
+      <div class="bars-section" id="bars-section"></div>
+    </div>
+
+    <div id="meta-section" style="display:none;">
+      <p class="panel-title">Face Details</p>
+      <div class="meta-card" id="meta-card"></div>
+    </div>
+
+    <div>
+      <p class="panel-title">Detection History</p>
+      <div class="history-list" id="history-list">
+        <div style="color:var(--muted);font-size:0.8rem;">History will appear here…</div>
+      </div>
+    </div>
+  </aside>
+</main>
+
+<script>
+// ─────────────────────────────────────────────
+// NeuraSense · Emotion AI
+// Uses face-api.js (vladmandic build) from CDN
+// ─────────────────────────────────────────────
+
+const MODEL_URL = 'https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/model';
+
+const EMOTIONS = {
+  happy:     { emoji: '😄', color: '#22c55e' },
+  sad:       { emoji: '😢', color: '#3b82f6' },
+  angry:     { emoji: '😡', color: '#ef4444' },
+  fearful:   { emoji: '😨', color: '#f97316' },
+  disgusted: { emoji: '🤢', color: '#a855f7' },
+  surprised: { emoji: '😲', color: '#eab308' },
+  neutral:   { emoji: '😐', color: '#94a3b8' },
+};
+
+let modelsLoaded = false;
+let liveStream = null;
+let liveRunning = false;
+let imgDetections = [];
+let liveDetections = [];
+let selectedFace = 0;
+let fpsCount = 0;
+let fpsLast = performance.now();
+let historyLog = [];
+let currentMode = 'image';
+
+// ── Load models via dynamic import ──────────────────────
+async function initFaceAPI() {
+  try {
+    // faceapi is loaded via <script type="module">, so we need to wait for it
+    // Try polling for faceapi global or module
+    let faceapi = window.faceapi;
+    if (!faceapi) {
+      // Dynamic import fallback
+      const mod = await import('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.esm.js');
+      faceapi = mod;
+      window.faceapi = faceapi;
+    }
+    return faceapi;
+  } catch(e) {
+    throw e;
+  }
+}
+
+async function loadModels() {
+  setStatus('loading', 'Loading AI models…');
+  try {
+    const fa = await initFaceAPI();
+    await fa.nets.tinyFaceDetector.loadFromUri(MODEL_URL);
+    await fa.nets.faceExpressionNet.loadFromUri(MODEL_URL);
+    await fa.nets.faceLandmark68TinyNet.loadFromUri(MODEL_URL);
+    modelsLoaded = true;
+    setStatus('ready', 'Models loaded · Ready to detect emotions');
+    document.getElementById('btn-analyze').disabled = false;
+  } catch(e) {
+    setStatus('error', 'Failed to load models. Check internet and refresh. ' + e.message);
+    console.error(e);
+  }
+}
+
+// Poll until faceapi script is loaded
+function waitForFaceAPI() {
+  return new Promise(resolve => {
+    const check = setInterval(() => {
+      if (window.faceapi || document.getElementById('faceapi-script')?.dataset?.loaded) {
+        clearInterval(check); resolve();
+      }
+    }, 100);
+    // Also trigger via import
+    import('https://cdn.jsdelivr.net/npm/@vladmandic/face-api@1.7.13/dist/face-api.esm.js')
+      .then(mod => { window.faceapi = mod; clearInterval(check); resolve(); })
+      .catch(() => {});
+  });
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await waitForFaceAPI();
+  loadModels();
+});
+
+// ── Helpers ─────────────────────────────────────────────
+function setStatus(state, msg) {
+  document.getElementById('status-dot').className = 'status-dot ' + state;
+  document.getElementById('status-text').textContent = msg;
+}
+
+function topEmotion(expressions) {
+  return Object.entries(expressions).sort((a,b) => b[1]-a[1])[0];
+}
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('mode-image').style.display = mode === 'image' ? '' : 'none';
+  document.getElementById('mode-live').style.display  = mode === 'live'  ? '' : 'none';
+  document.getElementById('tab-image').classList.toggle('active', mode === 'image');
+  document.getElementById('tab-live').classList.toggle('active', mode === 'live');
+  document.querySelectorAll('.nav-pill').forEach((p,i) => {
+    p.classList.toggle('active', i === (mode === 'image' ? 0 : 1));
+  });
+  if (mode === 'image') stopCamera();
+}
+
+// ── Image Upload ─────────────────────────────────────────
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('dragover');
+  const file = [...e.dataTransfer.files].find(f => f.type.startsWith('image/'));
+  if (file) loadFile(file);
+}
+function handleFileInput(e) {
+  if (e.target.files[0]) loadFile(e.target.files[0]);
+}
+function loadFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const img = document.getElementById('preview-img');
+    img.onload = () => {
+      document.getElementById('viewport-image').style.display = 'flex';
+      document.getElementById('drop-zone').style.display = 'none';
+      if (modelsLoaded) document.getElementById('btn-analyze').disabled = false;
+      clearResults();
+    };
+    img.src = ev.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+function clearImage() {
+  document.getElementById('preview-img').src = '';
+  document.getElementById('viewport-image').style.display = 'none';
+  document.getElementById('drop-zone').style.display = '';
+  document.getElementById('file-input').value = '';
+  document.getElementById('facetabs-img').style.display = 'none';
+  document.getElementById('badge-img').style.display = 'none';
+  const cvs = document.getElementById('overlay-img');
+  cvs.getContext('2d').clearRect(0,0,cvs.width,cvs.height);
+  imgDetections = []; clearResults();
+}
+
+async function analyzeImage() {
+  if (!modelsLoaded) return;
+  const img = document.getElementById('preview-img');
+  if (!img.src || img.src === window.location.href) return;
+
+  document.getElementById('img-loading').classList.add('visible');
+  try {
+    const fa = window.faceapi;
+    const opts = new fa.TinyFaceDetectorOptions({ inputSize: 416, scoreThreshold: 0.4 });
+    const dets = await fa.detectAllFaces(img, opts).withFaceLandmarks(true).withFaceExpressions();
+    imgDetections = dets;
+    document.getElementById('img-loading').classList.remove('visible');
+
+    if (!dets.length) {
+      setStatus('ready', 'No faces found in this image');
+      showNoFace(); return;
+    }
+
+    drawBoxes('overlay-img', img, dets, img.offsetWidth / img.naturalWidth, img.offsetHeight / img.naturalHeight);
+
+    document.getElementById('badge-img').textContent = `👤 ${dets.length}`;
+    document.getElementById('badge-img').style.display = '';
+    buildTabs('img', dets.length);
+    selectedFace = 0;
+    showResult(dets[0]);
+    pushHistory(dets[0].expressions);
+    setStatus('ready', `${dets.length} face(s) detected`);
+  } catch(e) {
+    document.getElementById('img-loading').classList.remove('visible');
+    setStatus('error', 'Detection error: ' + e.message);
+  }
+}
+
+// ── Live Camera ───────────────────────────────────────────
+async function startCamera() {
+  if (!modelsLoaded) { setStatus('error','Models still loading…'); return; }
+  try {
+    liveStream = await navigator.mediaDevices.getUserMedia({ video: { width:1280, height:720 } });
+    const vid = document.getElementById('live-video');
+    vid.srcObject = liveStream;
+    vid.style.display = '';
+    document.getElementById('live-placeholder').style.display = 'none';
+    document.getElementById('fps-badge').style.display = '';
+    document.getElementById('badge-live').style.display = '';
+    document.getElementById('btn-start').style.display = 'none';
+    document.getElementById('btn-stop').style.display = '';
+    liveRunning = true;
+    vid.addEventListener('loadedmetadata', () => {
+      const cvs = document.getElementById('overlay-live');
+      cvs.width = vid.videoWidth; cvs.height = vid.videoHeight;
+      runLive();
+    }, { once: true });
+    setStatus('ready', 'Live detection active');
+  } catch(e) {
+    setStatus('error', 'Camera denied. Allow camera permission and try again.');
+  }
+}
+
+function stopCamera() {
+  liveRunning = false;
+  if (liveStream) { liveStream.getTracks().forEach(t => t.stop()); liveStream = null; }
+  const vid = document.getElementById('live-video');
+  vid.srcObject = null; vid.style.display = 'none';
+  document.getElementById('live-placeholder').style.display = '';
+  document.getElementById('fps-badge').style.display = 'none';
+  document.getElementById('badge-live').style.display = 'none';
+  document.getElementById('btn-start').style.display = '';
+  document.getElementById('btn-stop').style.display = 'none';
+  document.getElementById('facetabs-live').style.display = 'none';
+  const cvs = document.getElementById('overlay-live');
+  cvs.getContext('2d').clearRect(0,0,cvs.width,cvs.height);
+  clearResults();
+  setStatus('ready', 'Camera stopped');
+}
+
+async function runLive() {
+  const vid = document.getElementById('live-video');
+  const cvs = document.getElementById('overlay-live');
+  const ctx = cvs.getContext('2d');
+  const fa = window.faceapi;
+  const opts = new fa.TinyFaceDetectorOptions({ inputSize: 224, scoreThreshold: 0.4 });
+  let frame = 0;
+
+  while (liveRunning) {
+    await new Promise(r => requestAnimationFrame(r));
+    if (vid.readyState !== 4) continue;
+    try {
+      const dets = await fa.detectAllFaces(vid, opts).withFaceLandmarks(true).withFaceExpressions();
+      ctx.clearRect(0, 0, cvs.width, cvs.height);
+      liveDetections = dets;
+
+      dets.forEach((det, i) => {
+        const b = det.detection.box;
+        const [emo, score] = topEmotion(det.expressions);
+        const col = EMOTIONS[emo]?.color || '#00d4ff';
+        ctx.strokeStyle = col; ctx.lineWidth = 2;
+        ctx.strokeRect(b.x, b.y, b.width, b.height);
+        drawCornersCtx(ctx, b.x, b.y, b.width, b.height, col);
+        ctx.fillStyle = col + 'cc';
+        ctx.fillRect(b.x, b.y - 24, b.width, 24);
+        ctx.fillStyle = '#000'; ctx.font = 'bold 13px Space Grotesk, sans-serif';
+        ctx.fillText(`#${i+1} ${emo} ${(score*100).toFixed(0)}%`, b.x+5, b.y-7);
+      });
+
+      if (dets.length) {
+        const idx = Math.min(selectedFace, dets.length-1);
+        buildTabs('live', dets.length);
+        showResult(dets[idx]);
+        document.getElementById('badge-live').textContent = `👤 ${dets.length}`;
+        if (++frame % 60 === 0) pushHistory(dets[0].expressions);
+      } else {
+        document.getElementById('badge-live').textContent = '👤 0';
+      }
+
+      // FPS counter
+      fpsCount++;
+      const now = performance.now();
+      if (now - fpsLast > 1000) {
+        document.getElementById('fps-badge').textContent = `${fpsCount} FPS`;
+        fpsCount = 0; fpsLast = now;
+      }
+    } catch(e) { /* skip frame */ }
+  }
+}
+
+// ── Drawing ───────────────────────────────────────────────
+function drawBoxes(canvasId, img, dets, sx, sy) {
+  const cvs = document.getElementById(canvasId);
+  cvs.width  = img.offsetWidth;
+  cvs.height = img.offsetHeight;
+  const ctx = cvs.getContext('2d');
+  ctx.clearRect(0, 0, cvs.width, cvs.height);
+  dets.forEach((det, i) => {
+    const b = det.detection.box;
+    const [emo, score] = topEmotion(det.expressions);
+    const col = EMOTIONS[emo]?.color || '#00d4ff';
+    const x=b.x*sx, y=b.y*sy, w=b.width*sx, h=b.height*sy;
+    ctx.strokeStyle = col; ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+    drawCornersCtx(ctx, x, y, w, h, col);
+    ctx.fillStyle = col + 'cc';
+    ctx.fillRect(x, y-22, w, 22);
+    ctx.fillStyle = '#000'; ctx.font = 'bold 12px Space Grotesk, sans-serif';
+    ctx.fillText(`#${i+1} ${emo} ${(score*100).toFixed(0)}%`, x+5, y-6);
+  });
+}
+
+function drawCornersCtx(ctx, x, y, w, h, color) {
+  const L = 14; ctx.strokeStyle = color; ctx.lineWidth = 3;
+  [[x,y,1,1],[x+w,y,-1,1],[x,y+h,1,-1],[x+w,y+h,-1,-1]].forEach(([cx,cy,dx,dy])=>{
+    ctx.beginPath(); ctx.moveTo(cx+dx*L,cy); ctx.lineTo(cx,cy); ctx.lineTo(cx,cy+dy*L); ctx.stroke();
+  });
+}
+
+// ── Results ───────────────────────────────────────────────
+function showResult(det) {
+  const exp = det.expressions;
+  const [emo, score] = topEmotion(exp);
+  const meta = EMOTIONS[emo] || { emoji:'🙂', color:'#00d4ff' };
+
+  const card = document.getElementById('dominant-card');
+  card.style.setProperty('--card-accent', meta.color);
+  card.innerHTML = `
+    <span class="emotion-emoji">${meta.emoji}</span>
+    <div class="emotion-name">${emo}</div>
+    <div class="confidence-text">${(score*100).toFixed(1)}% confidence</div>`;
+
+  const bars = Object.entries(exp).sort((a,b)=>b[1]-a[1]);
+  document.getElementById('bars-section').innerHTML = bars.map(([e,s])=>{
+    const m = EMOTIONS[e]||{emoji:'',color:'#94a3b8'};
+    const pct = (s*100).toFixed(1);
+    return `<div class="emotion-row">
+      <div class="emotion-label-row">
+        <span class="emotion-label">${m.emoji} ${e}</span>
+        <span class="emotion-pct">${pct}%</span>
+      </div>
+      <div class="bar-track">
+        <div class="bar-fill" style="--bar-color:${m.color};width:${pct}%"></div>
+      </div></div>`;
+  }).join('');
+
+  const box = det.detection.box;
+  document.getElementById('meta-section').style.display = '';
+  document.getElementById('meta-card').innerHTML = `
+    <div class="meta-row"><span class="meta-key">Detection score</span><span class="meta-val">${(det.detection.score*100).toFixed(1)}%</span></div>
+    <div class="meta-row"><span class="meta-key">Bounding box</span><span class="meta-val">${Math.round(box.width)}×${Math.round(box.height)}px</span></div>
+    <div class="meta-row"><span class="meta-key">Landmarks</span><span class="meta-val">68 pts</span></div>`;
+}
+
+function showNoFace() {
+  document.getElementById('dominant-card').innerHTML = `<div class="no-result">😶 No face detected.<br><small>Try a clearer image with a visible face.</small></div>`;
+  document.getElementById('bars-section').innerHTML = '';
+  document.getElementById('meta-section').style.display = 'none';
+}
+
+function clearResults() {
+  document.getElementById('dominant-card').innerHTML = `<div class="no-result">No face detected yet.<br>Upload an image or start the camera.</div>`;
+  document.getElementById('bars-section').innerHTML = '';
+  document.getElementById('meta-section').style.display = 'none';
+}
+
+function pushHistory(expressions) {
+  const [emo, score] = topEmotion(expressions);
+  const meta = EMOTIONS[emo]||{emoji:'🙂'};
+  historyLog.unshift({ emo, score, emoji: meta.emoji, time: new Date().toLocaleTimeString() });
+  if (historyLog.length > 10) historyLog.pop();
+  document.getElementById('history-list').innerHTML = historyLog.map(h=>`
+    <div class="history-item">
+      <span class="history-emoji">${h.emoji}</span>
+      <div class="history-info">
+        <div class="history-emotion">${h.emo}</div>
+        <div class="history-time">${h.time}</div>
+      </div>
+      <span class="history-conf">${(h.score*100).toFixed(0)}%</span>
+    </div>`).join('');
+}
+
+// ── Multi-face tabs ───────────────────────────────────────
+function buildTabs(mode, count) {
+  const el = document.getElementById(`facetabs-${mode}`);
+  if (count <= 1) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  el.innerHTML = Array.from({length:count},(_,i)=>`
+    <button class="face-tab ${i===selectedFace?'active':''}" onclick="selectFace(${i},'${mode}')">Face #${i+1}</button>`).join('');
+}
+
+function selectFace(idx, mode) {
+  selectedFace = idx;
+  const dets = mode === 'img' ? imgDetections : liveDetections;
+  if (dets[idx]) showResult(dets[idx]);
+  buildTabs(mode, dets.length);
+}
+</script>
+</body>
+</html>
