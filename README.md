@@ -7,7 +7,7 @@ No backend, no installation — runs entirely in the browser.
 👉 https://Charu-Sinha.github.io/emotion-detector
 
 ## 📸 Preview
-![NeuraSense Emotion Detector](Screenshot 2026-06-11 113853.png)
+![NeuraSense Emotion Detector](Screenshot%202026-06-11%20113853.png)
 
 ## ✨ Features
 - 🖼️ Upload any image and detect emotions instantly
